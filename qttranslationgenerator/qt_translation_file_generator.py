@@ -52,12 +52,9 @@ class QtTranslationFileGenerator:
         """
         try:
             language_name = language_dict[dest_lang_code]
-            print(
-                '{0} [{1}] -> Language code is valid.'.format(language_name, dest_lang_code))
+            print('Translating to {0}'.format(language_name))
         except KeyError:
-            print('{0} is not in language code dictionary.'.format(dest_lang_code))
-            raise LookupError(
-                '{0} is not in language code dictionary.'.format(dest_lang_code))
+            raise LookupError('{0} is not in language code dictionary.'.format(dest_lang_code))
 
         self.src_translation_file_path = src_translation_file_path
         self.dest_lang_code = dest_lang_code
@@ -148,6 +145,7 @@ class QtTranslationFileGenerator:
                             self.translated_text_map[source_text] = translated_text
                             bar.write('  Result: {0}'.format(translated_text))
 
+                            self._n_consecutive_translate_without_cache_write += 1
                             if self._n_consecutive_translate_without_cache_write > 10:
                                 self._write_cache()
                             time.sleep(1)
