@@ -1,8 +1,43 @@
 import xml.etree.ElementTree as elementTree
 import time
+import re
+import json
 from googletrans import Translator
 import os
 from .language_codes import language_dict
+
+
+class _ParsePythonFormat:
+    _regex_any = re.compile("{([^}]*)}")
+    _regex_number = re.compile("{([0-9]*)}")
+
+    def __init__(self, input: str):
+        self.input = input
+        self._mapping = {}
+        output = ""
+        prev = 0
+        for k, match in enumerate(_ParsePythonFormat._regex_any.finditer(input)):
+            self._mapping[str(k)] = match[1]
+            output += input[prev:match.start(1)]
+            output += str(k)
+            prev = match.end(1)
+        output += input[prev:]
+
+        self.output = output
+
+    def reverse(self, output):
+        input = ""
+        prev = 0
+        for match in _ParsePythonFormat._regex_number.finditer(output):
+            input += output[prev:match.start(1)]
+            input += self._mapping[match[1]]
+            prev = match.end(1)
+        input += output[prev:]
+        return input
+
+    @property
+    def has_format(self):
+        return len(self._mapping) > 0
 
 
 class QtTranslationFileGenerator:
@@ -35,12 +70,20 @@ class QtTranslationFileGenerator:
     def get_generated_translation_file_path(self, dest_lang_code):
         return '{0}/{1}'.format(self.output_dir, self.get_generated_translation_file_name(dest_lang_code))
 
-    def translate(self, dest_lang_code):
+    def translate(self, dest_lang_code, cache_file = None):
         """Generates new Qt translation file that includes translation texts for language specified in the given dest_lang_code
 
         Args:
             dest_lang_code (string): dest_lang_code (string): Destination translation language code
         """
+        if cache_file is not None and os.path.isfile(cache_file):
+            with open(cache_file, "r") as f:
+                translated_text_map = json.load(f)
+            # Check that cache file contains what it should contain
+            assert isinstance(translated_text_map, dict)
+            assert all(isinstance(k, str) for k in translated_text_map.keys())
+            assert all(isinstance(v, str) for v in translated_text_map.values())
+            self.translated_text_map = translated_text_map
         try:
             language_name = language_dict[dest_lang_code]
             print(
@@ -54,6 +97,12 @@ class QtTranslationFileGenerator:
             tree = elementTree.parse(f)
 
         self.__translate(tree, dest_lang_code)
+
+        if cache_file is not None:
+            tmp_cache_file = cache_file + ".tmp"
+            with open(tmp_cache_file, "w") as f:
+                json.dump(self.translated_text_map, f)
+            os.rename(tmp_cache_file, cache_file)
 
     def __translate(self, tree, dest_lang_code):
         """translate texts from given XML tree
@@ -85,27 +134,35 @@ class QtTranslationFileGenerator:
             try:
                 if "type" in translate_node.attrib:
                     attr_translation_type = translate_node.attrib["type"]
-                    if attr_translation_type == 'unfinished':
+                    if attr_translation_type == 'unfinished' and translate_node.text in ["", None]:
                         source_text = self.replace_special_characters(
                             source_node.text)
 
+                        print('Translating {0} ...'.format(source_text))
                         if source_text in self.translated_text_map:
                             translate_node.text = self.translated_text_map[source_text]
-                            #print('{0} has already been translated to {1}'.format(source_text, translate_node.text))
+                            print('  Result from cache: {0}'.format(translate_node.text))
                         else:
-                            #print('Translating {0} ...'.format(source_text))
+                            # Handle placeholders
+                            placeholder = _ParsePythonFormat(source_text)
+
+                            if placeholder.has_format:
+                                print("  Placeholder: {0}".format(placeholder.output))
                             translated_text = google_translator.translate(
-                                source_text, src='en', dest=dest_lang_code).text
+                                placeholder.output, src='en', dest=dest_lang_code).text
+                            translated_text = placeholder.reverse(translated_text)
                             translate_node.text = translated_text
                             self.translated_text_map[source_text] = translated_text
-                            print('{0} : {1}'.format(
-                                source_text, translated_text))
+                            print('  Result: {0}'.format(translated_text))
                             time.sleep(1)
+                    else:
+                        print("Skip already translated: {0}".format(source_node.text))
             except Exception as e:
                 print('parse_message_node : Exception during translation of {0}. Exception : {1}'.format(
                     source_node.text, str(e)))
+                raise
 
-    def replace_special_characters(self, str_in):
+    def replace_special_characters(self, str_in: str):
         """Replaces escape sequence in XML file with special characters 
         Special Character   Escape Sequence Purpose  
          &                   &amp;           Ampersand sign 
