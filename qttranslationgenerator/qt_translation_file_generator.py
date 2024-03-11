@@ -42,7 +42,7 @@ class _ParsePythonFormat:
 
 
 class QtTranslationFileGenerator:
-    def __init__(self, src_translation_file_path, dest_lang_code, cache_file = None) -> None:
+    def __init__(self, src_translation_file_path, dest_lang_code, cache_file = None, in_place: bool = False) -> None:
         """Initializes Qt translation file generator
 
         Args:
@@ -60,6 +60,7 @@ class QtTranslationFileGenerator:
         self.dest_lang_code = dest_lang_code
 
         self._cache_file = cache_file
+        self._in_place = in_place
 
         if self.src_translation_file_path is None:
             raise ValueError("Translation file name is not valid.")
@@ -87,9 +88,12 @@ class QtTranslationFileGenerator:
             self._n_consecutive_translate_without_cache_write = 0
 
     def get_generated_translation_file_path(self):
-        # get file path without extension
-        src_translation_file_path_no_ext = os.path.splitext(self.src_translation_file_path)[0]
-        return '{0}_generated.ts'.format(src_translation_file_path_no_ext)
+        if self._in_place:
+            return self.src_translation_file_path
+        else:
+            # get file path without extension
+            src_translation_file_path_no_ext = os.path.splitext(self.src_translation_file_path)[0]
+            return '{0}_generated.ts'.format(src_translation_file_path_no_ext)
 
     def translate(self):
         """Generates new Qt translation file that includes translation texts for language specified in the given dest_lang_code
