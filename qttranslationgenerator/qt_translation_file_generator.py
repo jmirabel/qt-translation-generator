@@ -52,7 +52,7 @@ class QtTranslationFileGenerator:
         """
         try:
             language_name = language_dict[dest_lang_code]
-            print('Translating to {0}'.format(language_name))
+            print('Translating {0} to {0}'.format(src_translation_file_path, language_name))
         except KeyError:
             raise LookupError('{0} is not in language code dictionary.'.format(dest_lang_code))
 
@@ -156,9 +156,8 @@ class QtTranslationFileGenerator:
                     else:
                         bar.write("Skip already translated: {0}".format(source_node.text))
             except Exception as e:
-                print('parse_message_node : Exception during translation of {0}. Exception : {1}'.format(
+                bar.write('Exception during translation of {0}. Exception : {1}'.format(
                     source_node.text, str(e)))
-                raise
 
     def replace_special_characters(self, str_in: str):
         """Replaces escape sequence in XML file with special characters 
